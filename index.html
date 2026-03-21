@@ -510,7 +510,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-       const firebaseConfig = {
+        const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -571,14 +571,37 @@
         function initDateRange() {
             const today = new Date();
             const dateStr = today.toISOString().split('T')[0];
-            document.getElementById('startDate').value = dateStr;
             
-            if (data.dateRange.startDate) {
+            // Only set default date if no saved data
+            if (!data.dateRange.startDate) {
+                document.getElementById('startDate').value = dateStr;
+                document.getElementById('numDays').value = 7;
+                data.dateRange = { startDate: dateStr, numDays: 7 };
+                
+                // Generate dates array for default range
+                dates = [];
+                const start = new Date(dateStr);
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(start);
+                    date.setDate(start.getDate() + i);
+                    dates.push(date);
+                }
+            } else {
                 document.getElementById('startDate').value = data.dateRange.startDate;
                 document.getElementById('numDays').value = data.dateRange.numDays;
+                
+                // Generate dates array from saved data (if not already done in loadData)
+                if (dates.length === 0) {
+                    const start = new Date(data.dateRange.startDate);
+                    for (let i = 0; i < data.dateRange.numDays; i++) {
+                        const date = new Date(start);
+                        date.setDate(start.getDate() + i);
+                        dates.push(date);
+                    }
+                }
             }
             
-            updateDateRange();
+            updateDateRangeDisplay();
         }
 
         function updateDateRange() {
@@ -605,6 +628,7 @@
 
         function updateDateRangeDisplay() {
             const display = document.getElementById('dateRangeDisplay');
+            
             if (dates.length === 0) {
                 display.textContent = 'Chưa chọn';
                 return;
@@ -646,17 +670,27 @@
             if (saved) {
                 data = JSON.parse(saved);
                 
-                // Update UI with localStorage data
+                // Update date inputs if we have saved date range
                 if (data.dateRange && data.dateRange.startDate) {
                     document.getElementById('startDate').value = data.dateRange.startDate;
                     document.getElementById('numDays').value = data.dateRange.numDays;
-                    updateDateRange();
+                    
+                    // Generate dates array
+                    dates = [];
+                    const start = new Date(data.dateRange.startDate);
+                    for (let i = 0; i < data.dateRange.numDays; i++) {
+                        const date = new Date(start);
+                        date.setDate(start.getDate() + i);
+                        dates.push(date);
+                    }
                 }
                 
+                // Render UI with loaded data
                 renderParticipants();
                 renderUserSelection();
                 renderMatrix();
                 updateResults();
+                updateDateRangeDisplay();
             }
             
             // Then setup Firebase listener for realtime sync (if configured)
@@ -669,17 +703,26 @@
                     if (loadedData && loadedData.participants) {
                         data = loadedData;
                         
-                        // Update UI
+                        // Update date inputs
                         if (data.dateRange && data.dateRange.startDate) {
                             document.getElementById('startDate').value = data.dateRange.startDate;
                             document.getElementById('numDays').value = data.dateRange.numDays;
-                            updateDateRange();
+                            
+                            // Generate dates array
+                            dates = [];
+                            const start = new Date(data.dateRange.startDate);
+                            for (let i = 0; i < data.dateRange.numDays; i++) {
+                                const date = new Date(start);
+                                date.setDate(start.getDate() + i);
+                                dates.push(date);
+                            }
                         }
                         
                         renderParticipants();
                         renderUserSelection();
                         renderMatrix();
                         updateResults();
+                        updateDateRangeDisplay();
                     }
                 });
             }
@@ -988,8 +1031,10 @@
         // =====================================================
         // INITIALIZATION
         // =====================================================
-        initDateRange();
+        // CRITICAL: Load data FIRST before initializing date range
+        // This prevents overwriting saved data with empty defaults
         loadData();
+        initDateRange();
         
         // CRITICAL FIX: Always render UI on page load
         // This ensures the form is visible even if Firebase has no data yet
