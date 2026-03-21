@@ -510,7 +510,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-        const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -641,11 +641,32 @@
         }
 
         function loadData() {
+            // First, try to load from localStorage
+            const saved = localStorage.getItem(LOCALSTORAGE_KEY);
+            if (saved) {
+                data = JSON.parse(saved);
+                
+                // Update UI with localStorage data
+                if (data.dateRange && data.dateRange.startDate) {
+                    document.getElementById('startDate').value = data.dateRange.startDate;
+                    document.getElementById('numDays').value = data.dateRange.numDays;
+                    updateDateRange();
+                }
+                
+                renderParticipants();
+                renderUserSelection();
+                renderMatrix();
+                updateResults();
+            }
+            
+            // Then setup Firebase listener for realtime sync (if configured)
             if (isFirebaseConfigured && db) {
-                // Load from Firebase
                 db.ref('events/' + eventId).on('value', (snapshot) => {
                     const loadedData = snapshot.val();
-                    if (loadedData) {
+                    
+                    // CRITICAL FIX: Only update if Firebase has actual data
+                    // Don't let null snapshots clear the UI
+                    if (loadedData && loadedData.participants) {
                         data = loadedData;
                         
                         // Update UI
@@ -661,24 +682,6 @@
                         updateResults();
                     }
                 });
-            } else {
-                // Load from localStorage if Firebase not configured
-                const saved = localStorage.getItem(LOCALSTORAGE_KEY);
-                if (saved) {
-                    data = JSON.parse(saved);
-                    
-                    // Update UI
-                    if (data.dateRange && data.dateRange.startDate) {
-                        document.getElementById('startDate').value = data.dateRange.startDate;
-                        document.getElementById('numDays').value = data.dateRange.numDays;
-                        updateDateRange();
-                    }
-                    
-                    renderParticipants();
-                    renderUserSelection();
-                    renderMatrix();
-                    updateResults();
-                }
             }
         }
 
@@ -688,8 +691,6 @@
         function addParticipant() {
             const input = document.getElementById('newParticipant');
             const name = input.value.trim();
-            
-            console.log('addParticipant called, name:', name);
             
             if (!name) {
                 alert('Vui lòng nhập tên');
@@ -702,7 +703,6 @@
             }
 
             data.participants.push(name);
-            console.log('Added participant, total:', data.participants.length);
             
             saveData();
             input.value = '';
@@ -746,6 +746,15 @@
             `).join('');
 
             document.getElementById('selectUserSection').style.display = 'block';
+            
+            // CRITICAL FIX: If a user is selected, show the matrix section
+            if (currentUser && data.participants.includes(currentUser)) {
+                document.getElementById('matrixSection').style.display = 'block';
+                document.getElementById('currentUserInfo').innerHTML = 
+                    `<strong>Đang điền lịch cho:</strong> ${currentUser}. Click vào các ô để đánh dấu rảnh.`;
+            } else {
+                document.getElementById('matrixSection').style.display = 'none';
+            }
         }
 
         function renderUserSelection() {
@@ -980,15 +989,14 @@
         // INITIALIZATION
         // =====================================================
         initDateRange();
+        loadData();
         
-        if (isFirebaseConfigured) {
-            loadData();
-        } else {
-            renderParticipants();
-            renderUserSelection();
-            renderMatrix();
-            updateResults();
-        }
+        // CRITICAL FIX: Always render UI on page load
+        // This ensures the form is visible even if Firebase has no data yet
+        renderParticipants();
+        renderUserSelection();
+        renderMatrix();
+        updateResults();
     </script>
 </body>
 </html>
