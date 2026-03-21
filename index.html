@@ -510,7 +510,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-        const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -693,47 +693,39 @@
                 updateDateRangeDisplay();
             }
             
-            // Then setup Firebase listener for realtime sync (if configured)
-            if (isFirebaseConfigured && db) {
-                let lastUpdate = Date.now();
-                
-                db.ref('events/' + eventId).on('value', (snapshot) => {
+            // Then try to load from Firebase ONCE (if configured and no localStorage)
+            if (isFirebaseConfigured && db && !saved) {
+                // CRITICAL FIX: Use .once() instead of .on() to avoid infinite loop
+                // Only load from Firebase if localStorage is empty
+                db.ref('events/' + eventId).once('value', (snapshot) => {
                     const loadedData = snapshot.val();
                     
-                    // CRITICAL FIX: Only update if Firebase has actual data
-                    // AND it's been at least 200ms since last update (debounce)
-                    const now = Date.now();
-                    if (loadedData && loadedData.participants && (now - lastUpdate) > 200) {
-                        lastUpdate = now;
+                    if (loadedData && loadedData.participants) {
+                        data = loadedData;
                         
-                        // Only update if data actually changed
-                        const currentDataStr = JSON.stringify(data);
-                        const loadedDataStr = JSON.stringify(loadedData);
+                        // Save to localStorage for future use
+                        localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
                         
-                        if (currentDataStr !== loadedDataStr) {
-                            data = loadedData;
+                        // Update date inputs
+                        if (data.dateRange && data.dateRange.startDate) {
+                            document.getElementById('startDate').value = data.dateRange.startDate;
+                            document.getElementById('numDays').value = data.dateRange.numDays;
                             
-                            // Update date inputs
-                            if (data.dateRange && data.dateRange.startDate) {
-                                document.getElementById('startDate').value = data.dateRange.startDate;
-                                document.getElementById('numDays').value = data.dateRange.numDays;
-                                
-                                // Generate dates array
-                                dates = [];
-                                const start = new Date(data.dateRange.startDate);
-                                for (let i = 0; i < data.dateRange.numDays; i++) {
-                                    const date = new Date(start);
-                                    date.setDate(start.getDate() + i);
-                                    dates.push(date);
-                                }
+                            // Generate dates array
+                            dates = [];
+                            const start = new Date(data.dateRange.startDate);
+                            for (let i = 0; i < data.dateRange.numDays; i++) {
+                                const date = new Date(start);
+                                date.setDate(start.getDate() + i);
+                                dates.push(date);
                             }
-                            
-                            renderParticipants();
-                            renderUserSelection();
-                            renderMatrix();
-                            updateResults();
-                            updateDateRangeDisplay();
                         }
+                        
+                        renderParticipants();
+                        renderUserSelection();
+                        renderMatrix();
+                        updateResults();
+                        updateDateRangeDisplay();
                     }
                 });
             }
