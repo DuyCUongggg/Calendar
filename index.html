@@ -695,34 +695,45 @@
             
             // Then setup Firebase listener for realtime sync (if configured)
             if (isFirebaseConfigured && db) {
+                let lastUpdate = Date.now();
+                
                 db.ref('events/' + eventId).on('value', (snapshot) => {
                     const loadedData = snapshot.val();
                     
                     // CRITICAL FIX: Only update if Firebase has actual data
-                    // Don't let null snapshots clear the UI
-                    if (loadedData && loadedData.participants) {
-                        data = loadedData;
+                    // AND it's been at least 200ms since last update (debounce)
+                    const now = Date.now();
+                    if (loadedData && loadedData.participants && (now - lastUpdate) > 200) {
+                        lastUpdate = now;
                         
-                        // Update date inputs
-                        if (data.dateRange && data.dateRange.startDate) {
-                            document.getElementById('startDate').value = data.dateRange.startDate;
-                            document.getElementById('numDays').value = data.dateRange.numDays;
+                        // Only update if data actually changed
+                        const currentDataStr = JSON.stringify(data);
+                        const loadedDataStr = JSON.stringify(loadedData);
+                        
+                        if (currentDataStr !== loadedDataStr) {
+                            data = loadedData;
                             
-                            // Generate dates array
-                            dates = [];
-                            const start = new Date(data.dateRange.startDate);
-                            for (let i = 0; i < data.dateRange.numDays; i++) {
-                                const date = new Date(start);
-                                date.setDate(start.getDate() + i);
-                                dates.push(date);
+                            // Update date inputs
+                            if (data.dateRange && data.dateRange.startDate) {
+                                document.getElementById('startDate').value = data.dateRange.startDate;
+                                document.getElementById('numDays').value = data.dateRange.numDays;
+                                
+                                // Generate dates array
+                                dates = [];
+                                const start = new Date(data.dateRange.startDate);
+                                for (let i = 0; i < data.dateRange.numDays; i++) {
+                                    const date = new Date(start);
+                                    date.setDate(start.getDate() + i);
+                                    dates.push(date);
+                                }
                             }
+                            
+                            renderParticipants();
+                            renderUserSelection();
+                            renderMatrix();
+                            updateResults();
+                            updateDateRangeDisplay();
                         }
-                        
-                        renderParticipants();
-                        renderUserSelection();
-                        renderMatrix();
-                        updateResults();
-                        updateDateRangeDisplay();
                     }
                 });
             }
@@ -911,6 +922,10 @@
             }
 
             saveData();
+            
+            // CRITICAL FIX: Re-render matrix and results after toggle
+            renderMatrix();
+            updateResults();
         }
 
         function showTooltip(event, slot) {
