@@ -196,41 +196,6 @@
             font-size: 0.95em;
         }
 
-        /* Share link */
-        .share-section {
-            background: #f0fdf4;
-            border: 1px solid #10b981;
-            padding: 16px;
-            margin-bottom: 20px;
-        }
-
-        .share-link {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .share-link input {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #10b981;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
-
-        .copy-btn {
-            padding: 8px 16px;
-            background: #10b981;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-family: inherit;
-        }
-
-        .copy-btn:hover {
-            background: #059669;
-        }
-
         /* Matrix */
         .matrix-container {
             overflow-x: auto;
@@ -447,7 +412,6 @@
 <body>
     <div class="container">
         <h1>Tìm Lịch Rảnh</h1>
-        <div class="subtitle">Cùng điền lịch rảnh vào bảng chung - Realtime sync</div>
 
         <!-- Firebase Setup Notice -->
         <div class="section" id="firebaseNotice">
@@ -461,18 +425,6 @@
                 <li>Lấy Firebase Config từ Project Settings</li>
                 <li>Paste config vào dòng 750 của file HTML này</li>
             </ol>
-        </div>
-
-        <!-- Share Link -->
-        <div class="section" id="shareSection" style="display: none;">
-            <div class="section-title">📤 Chia sẻ link</div>
-            <div class="share-section">
-                <strong>Gửi link này cho bạn bè:</strong>
-                <div class="share-link">
-                    <input type="text" id="shareLink" readonly />
-                    <button class="copy-btn" onclick="copyLink()">Copy</button>
-                </div>
-            </div>
         </div>
 
         <!-- Date Range -->
@@ -506,7 +458,7 @@
             <div class="section-title">2. Quản lý người tham gia</div>
             
             <div class="add-participant">
-                <input type="text" id="newParticipant" placeholder="Nhập tên người tham gia" />
+                <input type="text" id="newParticipant" placeholder="Nhập tên người tham gia" onkeypress="if(event.key==='Enter') addParticipant()" />
                 <button class="add-btn" onclick="addParticipant()">+ Thêm</button>
             </div>
 
@@ -559,15 +511,16 @@
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
         const firebaseConfig = {
-  apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
-  authDomain: "calendar-78177.firebaseapp.com",
-  databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "calendar-78177",
-  storageBucket: "calendar-78177.firebasestorage.app",
-  messagingSenderId: "430449507404",
-  appId: "1:430449507404:web:d6de8c1ff0ec1d901d48e9",
-  measurementId: "G-8554TD6QV6"
-};
+            // Paste your Firebase config here
+            // Example:
+            // apiKey: "AIza...",
+            // authDomain: "your-project.firebaseapp.com",
+            // databaseURL: "https://your-project.firebaseio.com",
+            // projectId: "your-project",
+            // storageBucket: "your-project.appspot.com",
+            // messagingSenderId: "123456789",
+            // appId: "1:123456789:web:abcdef"
+        };
 
         // Check if Firebase is configured
         let db = null;
@@ -579,7 +532,6 @@
                 db = firebase.database();
                 isFirebaseConfigured = true;
                 document.getElementById('firebaseNotice').style.display = 'none';
-                document.getElementById('shareSection').style.display = 'block';
             } catch (error) {
                 console.error('Firebase initialization error:', error);
             }
@@ -593,19 +545,6 @@
             eventId = 'event_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             const newUrl = window.location.pathname + '?event=' + eventId;
             window.history.replaceState({}, '', newUrl);
-        }
-
-        // Update share link
-        const shareLink = window.location.origin + window.location.pathname + '?event=' + eventId;
-        if (document.getElementById('shareLink')) {
-            document.getElementById('shareLink').value = shareLink;
-        }
-
-        function copyLink() {
-            const input = document.getElementById('shareLink');
-            input.select();
-            document.execCommand('copy');
-            alert('Đã copy link!');
         }
 
         // =====================================================
@@ -690,19 +629,44 @@
         // =====================================================
         // FIREBASE SYNC
         // =====================================================
+        const LOCALSTORAGE_KEY = 'schedule_data_' + eventId;
+        
         function saveData() {
-            if (!isFirebaseConfigured || !db) return;
+            // Save to localStorage as backup
+            localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
             
-            db.ref('events/' + eventId).set(data);
+            // Also save to Firebase if configured
+            if (isFirebaseConfigured && db) {
+                db.ref('events/' + eventId).set(data);
+            }
         }
 
         function loadData() {
-            if (!isFirebaseConfigured || !db) return;
-
-            db.ref('events/' + eventId).on('value', (snapshot) => {
-                const loadedData = snapshot.val();
-                if (loadedData) {
-                    data = loadedData;
+            if (isFirebaseConfigured && db) {
+                // Load from Firebase
+                db.ref('events/' + eventId).on('value', (snapshot) => {
+                    const loadedData = snapshot.val();
+                    if (loadedData) {
+                        data = loadedData;
+                        
+                        // Update UI
+                        if (data.dateRange && data.dateRange.startDate) {
+                            document.getElementById('startDate').value = data.dateRange.startDate;
+                            document.getElementById('numDays').value = data.dateRange.numDays;
+                            updateDateRange();
+                        }
+                        
+                        renderParticipants();
+                        renderUserSelection();
+                        renderMatrix();
+                        updateResults();
+                    }
+                });
+            } else {
+                // Load from localStorage if Firebase not configured
+                const saved = localStorage.getItem(LOCALSTORAGE_KEY);
+                if (saved) {
+                    data = JSON.parse(saved);
                     
                     // Update UI
                     if (data.dateRange && data.dateRange.startDate) {
@@ -716,7 +680,7 @@
                     renderMatrix();
                     updateResults();
                 }
-            });
+            }
         }
 
         // =====================================================
@@ -725,6 +689,8 @@
         function addParticipant() {
             const input = document.getElementById('newParticipant');
             const name = input.value.trim();
+            
+            console.log('addParticipant called, name:', name);
             
             if (!name) {
                 alert('Vui lòng nhập tên');
@@ -737,6 +703,8 @@
             }
 
             data.participants.push(name);
+            console.log('Added participant, total:', data.participants.length);
+            
             saveData();
             input.value = '';
             renderParticipants();
