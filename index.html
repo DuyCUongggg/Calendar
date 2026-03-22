@@ -563,20 +563,34 @@
 </head>
 <body>
     <div class="container">
-        <h1>Tìm Lịch Rảnh</h1>
+        <h1>Tìm Lịch Rảnh <span id="syncStatus" style="font-size: 0.4em; color: #999; font-weight: 400;"></span></h1>
 
         <!-- Firebase Setup Notice -->
         <div class="section" id="firebaseNotice">
             <div class="section-title">⚠️ Cần setup Firebase</div>
             <p style="color: #dc2626; margin-bottom: 12px;">
-                <strong>Bạn chưa cấu hình Firebase!</strong> Vui lòng:
+                <strong>Bạn chưa cấu hình Firebase!</strong> Làm theo 4 bước:
             </p>
             <ol style="margin-left: 20px; line-height: 2;">
-                <li>Tạo Firebase project tại <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
-                <li>Tạo Realtime Database (test mode)</li>
-                <li>Lấy Firebase Config từ Project Settings</li>
-                <li>Paste config vào dòng 433 của file HTML này</li>
+                <li>Tạo Firebase project tại <a href="https://console.firebase.google.com" target="_blank" style="color: #10b981;">console.firebase.google.com</a></li>
+                <li>Tạo <strong>Realtime Database</strong> → Chọn region <strong>asia-southeast1</strong></li>
+                <li><strong>Quan trọng:</strong> Vào tab <strong>Rules</strong> và paste đoạn này:
+                    <pre style="background: #f5f5f5; padding: 10px; margin: 8px 0; border-radius: 4px; font-size: 0.85em;">{
+  "rules": {
+    "events": {
+      "$eventId": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}</pre>
+                </li>
+                <li>Lấy Firebase Config từ <strong>Project Settings → General → Your apps</strong> và paste vào dòng <strong>433</strong> của file HTML này</li>
             </ol>
+            <p style="color: #059669; margin-top: 12px; font-size: 0.9em;">
+                ✅ Sau khi setup xong, tất cả mọi người vào link sẽ tự động sync!
+            </p>
         </div>
 
         <!-- Date Range & Filters -->
@@ -683,7 +697,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-      const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -771,13 +785,20 @@
         }
         
         function saveToFirebase() {
-            if (!isFirebaseConfigured || !db) return;
+            if (!isFirebaseConfigured || !db) {
+                updateSyncStatus('offline');
+                return;
+            }
             
             console.log('[FIREBASE] Saving...');
+            updateSyncStatus('saving');
+            
             db.ref('events/' + eventId).set(data).then(() => {
                 console.log('[FIREBASE] Saved successfully');
+                updateSyncStatus('synced');
             }).catch((err) => {
                 console.error('[FIREBASE] Save error:', err);
+                updateSyncStatus('error');
             });
         }
         
@@ -789,42 +810,69 @@
             db.ref('events/' + eventId).on('value', (snapshot) => {
                 const firebaseData = snapshot.val();
                 
-                if (!firebaseData || !firebaseData.participants) {
-                    console.log('[FIREBASE] No data from server, keeping local data');
-                    return;
-                }
+                console.log('[FIREBASE] Received data:', firebaseData);
                 
-                const localParticipants = data.participants || [];
-                const firebaseParticipants = firebaseData.participants || [];
-                
-                if (localParticipants.length >= firebaseParticipants.length) {
-                    console.log('[FIREBASE] Local data is newer, ignoring Firebase update');
-                    return;
-                }
-                
-                console.log('[FIREBASE] Received update, merging...');
-                data = firebaseData;
-                
-                if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
-                    document.getElementById('startDate').value = data.dateRange.startDate;
-                    document.getElementById('endDate').value = data.dateRange.endDate;
+                // If Firebase has data, always use it
+                if (firebaseData && firebaseData.participants) {
+                    console.log('[FIREBASE] Loading data from server');
+                    data = firebaseData;
                     
-                    dates = [];
-                    const start = new Date(data.dateRange.startDate);
-                    const end = new Date(data.dateRange.endDate);
-                    const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
-                    
-                    for (let i = 0; i < numDays; i++) {
-                        const date = new Date(start);
-                        date.setDate(start.getDate() + i);
-                        dates.push(date);
+                    // Update UI
+                    if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
+                        document.getElementById('startDate').value = data.dateRange.startDate;
+                        document.getElementById('endDate').value = data.dateRange.endDate;
+                        
+                        dates = [];
+                        const start = new Date(data.dateRange.startDate);
+                        const end = new Date(data.dateRange.endDate);
+                        const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                        
+                        for (let i = 0; i < numDays; i++) {
+                            const date = new Date(start);
+                            date.setDate(start.getDate() + i);
+                            dates.push(date);
+                        }
                     }
+                    
+                    saveToLocalStorage();
+                    renderAll();
+                    updateDateRangeDisplay();
+                    updateSyncStatus('synced');
+                } else {
+                    console.log('[FIREBASE] No data from server yet');
+                    updateSyncStatus('empty');
                 }
-                
-                saveToLocalStorage();
-                renderAll();
-                updateDateRangeDisplay();
             });
+        }
+
+        function updateSyncStatus(status) {
+            const statusEl = document.getElementById('syncStatus');
+            if (!statusEl) return;
+            
+            switch(status) {
+                case 'saving':
+                    statusEl.textContent = '💾 Đang lưu...';
+                    statusEl.style.color = '#f59e0b';
+                    break;
+                case 'synced':
+                    statusEl.textContent = '✅ Đã đồng bộ';
+                    statusEl.style.color = '#10b981';
+                    setTimeout(() => {
+                        statusEl.textContent = '';
+                    }, 2000);
+                    break;
+                case 'error':
+                    statusEl.textContent = '❌ Lỗi sync';
+                    statusEl.style.color = '#dc2626';
+                    break;
+                case 'offline':
+                    statusEl.textContent = '⚠️ Chế độ offline';
+                    statusEl.style.color = '#999';
+                    break;
+                case 'empty':
+                    statusEl.textContent = '';
+                    break;
+            }
         }
 
         // =====================================================
@@ -1498,8 +1546,10 @@
         // =====================================================
         console.log('[INIT] Starting...');
         
+        // Load from localStorage first (for offline/fast initial render)
         const hasLocalData = loadFromLocalStorage();
         
+        // Init date range if not already loaded
         if (!data.dateRange.startDate || !data.dateRange.endDate) {
             console.log('[INIT] No date range, initializing...');
             initDateRange();
@@ -1522,10 +1572,49 @@
             updateDateRangeDisplay();
         }
         
+        // Render UI with local data first (fast)
         console.log('[INIT] Rendering UI...');
         renderAll();
         
+        // Setup Firebase sync (will override local if Firebase has newer data)
         setupFirebaseSync();
+        
+        // If Firebase is configured, try to load from Firebase immediately
+        if (isFirebaseConfigured && db) {
+            console.log('[INIT] Fetching from Firebase...');
+            db.ref('events/' + eventId).once('value').then((snapshot) => {
+                const firebaseData = snapshot.val();
+                if (firebaseData && firebaseData.participants && firebaseData.participants.length > 0) {
+                    console.log('[INIT] Firebase has data, loading...');
+                    data = firebaseData;
+                    
+                    if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
+                        document.getElementById('startDate').value = data.dateRange.startDate;
+                        document.getElementById('endDate').value = data.dateRange.endDate;
+                        
+                        dates = [];
+                        const start = new Date(data.dateRange.startDate);
+                        const end = new Date(data.dateRange.endDate);
+                        const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                        
+                        for (let i = 0; i < numDays; i++) {
+                            const date = new Date(start);
+                            date.setDate(start.getDate() + i);
+                            dates.push(date);
+                        }
+                        
+                        updateDateRangeDisplay();
+                    }
+                    
+                    saveToLocalStorage();
+                    renderAll();
+                } else {
+                    console.log('[INIT] Firebase empty, using local data');
+                }
+            }).catch((error) => {
+                console.error('[INIT] Firebase fetch error:', error);
+            });
+        }
         
         console.log('[INIT] Complete!');
     </script>
