@@ -486,6 +486,10 @@
         <div class="section">
             <div class="section-title">1. Chọn khoảng thời gian</div>
             
+            <div style="color: #666; font-size: 0.9em; margin-bottom: 12px;">
+                📅 Chọn tối đa 100 ngày. Ma trận hiển thị 15 ngày/trang, dùng nút mũi tên để chuyển trang.
+            </div>
+            
             <div class="date-controls">
                 <div>
                     <label>Ngày bắt đầu:</label>
@@ -526,7 +530,7 @@
             <div class="current-user-info" id="currentUserInfo" style="display: none;"></div>
 
             <div class="info-box">
-                💡 <strong>Cách dùng:</strong> Chọn tên của bạn ở trên, sau đó click vào các ô để đánh dấu bạn rảnh. Ô có chấm đen góc trái = bạn đã tick. Màu xanh đậm = nhiều người rảnh. Hover vào ô để xem chi tiết. Tự động lưu mỗi lần bạn click.
+                💡 <strong>Cách dùng:</strong> Chọn tên của bạn ở trên, sau đó click vào các ô để đánh dấu bạn rảnh. Ô có chấm đen góc trái = bạn đã tick. Màu xanh đậm = nhiều người rảnh. Dùng mũi tên ◀ ▶ để xem 15 ngày tiếp theo (nếu chọn > 15 ngày). Tự động lưu mỗi lần bạn click.
             </div>
 
             <div class="matrix-container">
@@ -535,6 +539,7 @@
 
             <div class="date-nav">
                 <button class="nav-btn" onclick="navigateDates(-1)">◀</button>
+                <span id="pageIndicator" style="margin: 0 20px; color: #666; font-size: 0.9em;"></span>
                 <button class="nav-btn" onclick="navigateDates(1)">▶</button>
             </div>
         </div>
@@ -549,7 +554,7 @@
 
         <!-- Footer -->
         <div style="text-align: center; padding: 20px; color: #999; font-size: 0.85em;">
-            Version v1.0.3
+            Version v1.0.4
         </div>
     </div>
 
@@ -564,7 +569,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-      const firebaseConfig = {
+        const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -614,6 +619,8 @@
 
         let currentUser = null;
         let dates = [];
+        let viewIndex = 0;  // Trang hiện tại (0 = 15 ngày đầu, 1 = 15 ngày tiếp, ...)
+        const DAYS_PER_PAGE = 15;
         
         const TIME_SLOTS = [];
         for (let h = 7; h <= 22; h++) {
@@ -770,20 +777,23 @@
             
             const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
             
-            if (numDays > 15) {
-                alert('Chỉ được chọn tối đa 15 ngày');
+            if (numDays > 100) {
+                alert('Chỉ được chọn tối đa 100 ngày');
                 return;
             }
 
             data.dateRange = { startDate, endDate };
             
-            // Generate dates
+            // Generate ALL dates
             dates = [];
             for (let i = 0; i < numDays; i++) {
                 const date = new Date(start);
                 date.setDate(start.getDate() + i);
                 dates.push(date);
             }
+
+            // Reset view to first page
+            viewIndex = 0;
 
             updateDateRangeDisplay();
             renderMatrix();
@@ -805,20 +815,41 @@
         }
 
         function navigateDates(direction) {
-            const startInput = document.getElementById('startDate');
-            const endInput = document.getElementById('endDate');
+            const totalPages = Math.ceil(dates.length / DAYS_PER_PAGE);
             
-            const currentStart = new Date(startInput.value);
-            const currentEnd = new Date(endInput.value);
+            viewIndex += direction;
             
-            // Shift both dates by 15 days
-            currentStart.setDate(currentStart.getDate() + (direction * 15));
-            currentEnd.setDate(currentEnd.getDate() + (direction * 15));
+            // Clamp to valid range
+            if (viewIndex < 0) {
+                viewIndex = 0;
+            }
             
-            startInput.value = currentStart.toISOString().split('T')[0];
-            endInput.value = currentEnd.toISOString().split('T')[0];
+            if (viewIndex >= totalPages) {
+                viewIndex = totalPages - 1;
+            }
             
-            updateDateRange();
+            renderMatrix();
+            updateNavigationButtons();
+        }
+        
+        function updateNavigationButtons() {
+            if (dates.length === 0) return;
+            
+            const totalPages = Math.ceil(dates.length / DAYS_PER_PAGE);
+            const prevBtn = document.querySelectorAll('.nav-btn')[0];
+            const nextBtn = document.querySelectorAll('.nav-btn')[1];
+            
+            if (prevBtn) {
+                prevBtn.disabled = viewIndex === 0;
+                prevBtn.style.opacity = viewIndex === 0 ? '0.3' : '1';
+                prevBtn.style.cursor = viewIndex === 0 ? 'not-allowed' : 'pointer';
+            }
+            
+            if (nextBtn) {
+                nextBtn.disabled = viewIndex >= totalPages - 1;
+                nextBtn.style.opacity = viewIndex >= totalPages - 1 ? '0.3' : '1';
+                nextBtn.style.cursor = viewIndex >= totalPages - 1 ? 'not-allowed' : 'pointer';
+            }
         }
 
         // =====================================================
@@ -948,7 +979,12 @@
                 html += `<div class="matrix-header">${hour}h</div>`;
             });
 
-            dates.forEach(date => {
+            // Pagination: Chỉ hiện 15 ngày theo viewIndex
+            const startIdx = viewIndex * DAYS_PER_PAGE;
+            const endIdx = Math.min(startIdx + DAYS_PER_PAGE, dates.length);
+            const visibleDates = dates.slice(startIdx, endIdx);
+
+            visibleDates.forEach(date => {
                 const dateStr = date.toISOString().split('T')[0];
                 const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
                 const dayName = dayNames[date.getDay()];
@@ -997,6 +1033,23 @@
             });
 
             container.innerHTML = html;
+            
+            // Update page indicator
+            const totalPages = Math.ceil(dates.length / DAYS_PER_PAGE);
+            const currentPage = viewIndex + 1;
+            const pageIndicator = document.getElementById('pageIndicator');
+            if (pageIndicator) {
+                if (totalPages > 1) {
+                    const startDate = visibleDates[0];
+                    const endDate = visibleDates[visibleDates.length - 1];
+                    pageIndicator.textContent = `Trang ${currentPage}/${totalPages} (${startDate.getDate()}/${startDate.getMonth() + 1} - ${endDate.getDate()}/${endDate.getMonth() + 1})`;
+                } else {
+                    pageIndicator.textContent = '';
+                }
+            }
+            
+            // Update navigation button states
+            updateNavigationButtons();
         }
 
         function toggleSlot(slot) {
