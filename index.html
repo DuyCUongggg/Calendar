@@ -194,38 +194,74 @@
 
         /* Matrix */
         .matrix-container {
-            overflow-x: auto;
+            overflow: auto;
             margin-top: 20px;
+            max-height: 600px;
+            position: relative;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        .matrix-container::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+
+        .matrix-container::-webkit-scrollbar-track {
+            background: #f5f5f5;
+        }
+
+        .matrix-container::-webkit-scrollbar-thumb {
+            background: #d0d0d0;
+            border-radius: 6px;
+        }
+
+        .matrix-container::-webkit-scrollbar-thumb:hover {
+            background: #10b981;
         }
 
         .time-matrix {
             display: grid;
-            grid-template-columns: 160px repeat(16, 55px);
+            grid-template-columns: 140px repeat(16, 60px);
             gap: 1px;
             background: #e0e0e0;
             border: 1px solid #e0e0e0;
-            min-width: 1040px;
+            min-width: fit-content;
         }
 
         .matrix-header {
             background: #f5f5f5;
             font-weight: 600;
-            padding: 10px 6px;
+            padding: 12px 8px;
             text-align: center;
-            font-size: 0.85em;
+            font-size: 0.9em;
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 20;
+            border-bottom: 2px solid #10b981;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .matrix-header:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 30;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.1);
         }
 
         .row-header {
             background: #f5f5f5;
             font-weight: 600;
-            padding: 10px 12px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
             justify-content: center;
             gap: 4px;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            border-right: 2px solid #10b981;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
         }
 
         .row-header .date-row {
@@ -248,7 +284,7 @@
             background: white;
             cursor: pointer;
             transition: all 0.15s;
-            min-height: 45px;
+            min-height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -259,6 +295,20 @@
 
         .time-cell:hover {
             box-shadow: inset 0 0 0 2px #10b981;
+            z-index: 5;
+        }
+
+        /* Chấm tròn đen đánh dấu ô của user hiện tại */
+        .time-cell.current-user-marked::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            width: 10px;
+            height: 10px;
+            background: #1a1a1a;
+            border-radius: 50%;
+            z-index: 1;
         }
 
         .time-cell.heat-0 { background: #ffffff; color: #999; }
@@ -361,23 +411,6 @@
             font-size: 1.1em;
         }
 
-        button.primary {
-            background: #10b981;
-            color: white;
-            border: none;
-            padding: 14px 28px;
-            font-size: 1em;
-            cursor: pointer;
-            font-family: inherit;
-            font-weight: 500;
-            width: 100%;
-            margin-top: 16px;
-        }
-
-        button.primary:hover {
-            background: #059669;
-        }
-
         button.secondary {
             background: white;
             color: #666;
@@ -395,7 +428,7 @@
 
         @media (max-width: 900px) {
             .time-matrix {
-                grid-template-columns: 140px repeat(16, 50px);
+                grid-template-columns: 100px repeat(16, 50px);
             }
 
             .section {
@@ -405,6 +438,28 @@
             .date-controls {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+            
+            .matrix-header {
+                font-size: 0.8em;
+                padding: 10px 6px;
+            }
+            
+            .row-header {
+                padding: 10px 8px;
+            }
+            
+            .time-cell {
+                min-height: 45px;
+                font-size: 0.75em;
+            }
+            
+            /* Chấm nhỏ hơn trên mobile */
+            .time-cell.current-user-marked::before {
+                width: 8px;
+                height: 8px;
+                top: 4px;
+                left: 4px;
             }
         }
     </style>
@@ -471,7 +526,7 @@
             <div class="current-user-info" id="currentUserInfo"></div>
 
             <div class="info-box">
-                💡 <strong>Cách dùng:</strong> Click vào các ô để đánh dấu bạn rảnh. Màu xanh đậm = nhiều người rảnh. Hover vào ô để xem chi tiết.
+                💡 <strong>Cách dùng:</strong> Click vào các ô để đánh dấu bạn rảnh. Ô có chấm đen góc trái = bạn đã tick. Màu xanh đậm = nhiều người rảnh. Hover vào ô để xem chi tiết. Tự động lưu mỗi lần bạn click.
             </div>
 
             <div class="matrix-container">
@@ -482,8 +537,6 @@
                 <button class="nav-btn" onclick="navigateDates(-1)">◀</button>
                 <button class="nav-btn" onclick="navigateDates(1)">▶</button>
             </div>
-
-            <button class="primary" onclick="finishMarking()">✓ Hoàn tất</button>
         </div>
 
         <!-- Results -->
@@ -506,7 +559,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -895,9 +948,13 @@ const firebaseConfig = {
                         // count từ 1-14 → heat-1 đến heat-14
                         heatClass = `heat-${count}`;
                     }
+                    
+                    // Check if current user has marked this slot
+                    const isCurrentUserMarked = currentUser && available.includes(currentUser);
+                    const markedClass = isCurrentUserMarked ? 'current-user-marked' : '';
 
                     html += `
-                        <div class="time-cell ${heatClass}" 
+                        <div class="time-cell ${heatClass} ${markedClass}" 
                              data-slot="${slot}"
                              onclick="toggleSlot('${slot}')"
                              onmouseenter="showTooltip(event, '${slot}')"
@@ -983,14 +1040,6 @@ const firebaseConfig = {
 
         function hideTooltip() {
             document.getElementById('tooltip').classList.remove('show');
-        }
-
-        function finishMarking() {
-            alert(`Đã lưu lịch của ${currentUser}`);
-            currentUser = null;
-            renderParticipants();
-            renderUserSelection();
-            document.getElementById('matrixSection').style.display = 'none';
         }
 
         // =====================================================
