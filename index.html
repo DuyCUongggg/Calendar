@@ -31,11 +31,6 @@
             color: #10b981;
         }
 
-        .subtitle {
-            color: #666;
-            margin-bottom: 32px;
-        }
-
         .section {
             background: white;
             border: 1px solid #e0e0e0;
@@ -98,11 +93,6 @@
         .nav-btn:hover {
             background: #f0fdf4;
             border-color: #10b981;
-        }
-
-        .nav-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
         }
 
         .date-range-display {
@@ -387,12 +377,6 @@
             border-color: #10b981;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-
         @media (max-width: 900px) {
             .time-matrix {
                 grid-template-columns: 140px repeat(16, 50px);
@@ -423,7 +407,7 @@
                 <li>Tạo Firebase project tại <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
                 <li>Tạo Realtime Database (test mode)</li>
                 <li>Lấy Firebase Config từ Project Settings</li>
-                <li>Paste config vào dòng 750 của file HTML này</li>
+                <li>Paste config vào dòng 440 của file HTML này</li>
             </ol>
         </div>
 
@@ -510,7 +494,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-       const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -560,9 +544,65 @@
 
         let currentUser = null;
         let dates = [];
+        let isUpdatingFromFirebase = false; // Flag to prevent loop
+        
         const TIME_SLOTS = [];
         for (let h = 7; h <= 22; h++) {
             TIME_SLOTS.push(h);
+        }
+
+        // =====================================================
+        // FIREBASE SYNC
+        // =====================================================
+        function saveData() {
+            // Save to Firebase if configured
+            if (isFirebaseConfigured && db) {
+                db.ref('events/' + eventId).set(data);
+            }
+        }
+
+        function loadData() {
+            if (!isFirebaseConfigured || !db) {
+                // No Firebase, just init with defaults
+                initDateRange();
+                renderAll();
+                return;
+            }
+
+            // Setup Firebase realtime listener
+            db.ref('events/' + eventId).on('value', (snapshot) => {
+                const loadedData = snapshot.val();
+                
+                if (loadedData && loadedData.participants) {
+                    // Set flag to prevent save loop
+                    isUpdatingFromFirebase = true;
+                    
+                    data = loadedData;
+                    
+                    // Update date inputs
+                    if (data.dateRange && data.dateRange.startDate) {
+                        document.getElementById('startDate').value = data.dateRange.startDate;
+                        document.getElementById('numDays').value = data.dateRange.numDays;
+                        
+                        // Generate dates array
+                        dates = [];
+                        const start = new Date(data.dateRange.startDate);
+                        for (let i = 0; i < data.dateRange.numDays; i++) {
+                            const date = new Date(start);
+                            date.setDate(start.getDate() + i);
+                            dates.push(date);
+                        }
+                    }
+                    
+                    renderAll();
+                    updateDateRangeDisplay();
+                    
+                    // Reset flag after render
+                    setTimeout(() => {
+                        isUpdatingFromFirebase = false;
+                    }, 100);
+                }
+            });
         }
 
         // =====================================================
@@ -572,13 +612,12 @@
             const today = new Date();
             const dateStr = today.toISOString().split('T')[0];
             
-            // Only set default date if no saved data
             if (!data.dateRange.startDate) {
                 document.getElementById('startDate').value = dateStr;
                 document.getElementById('numDays').value = 7;
                 data.dateRange = { startDate: dateStr, numDays: 7 };
                 
-                // Generate dates array for default range
+                // Generate dates array
                 dates = [];
                 const start = new Date(dateStr);
                 for (let i = 0; i < 7; i++) {
@@ -590,7 +629,6 @@
                 document.getElementById('startDate').value = data.dateRange.startDate;
                 document.getElementById('numDays').value = data.dateRange.numDays;
                 
-                // Generate dates array from saved data (if not already done in loadData)
                 if (dates.length === 0) {
                     const start = new Date(data.dateRange.startDate);
                     for (let i = 0; i < data.dateRange.numDays; i++) {
@@ -623,7 +661,10 @@
 
             updateDateRangeDisplay();
             renderMatrix();
-            saveData();
+            
+            if (!isUpdatingFromFirebase) {
+                saveData();
+            }
         }
 
         function updateDateRangeDisplay() {
@@ -650,88 +691,6 @@
         }
 
         // =====================================================
-        // FIREBASE SYNC
-        // =====================================================
-        const LOCALSTORAGE_KEY = 'schedule_data_' + eventId;
-        
-        function saveData() {
-            // Save to localStorage as backup
-            localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
-            
-            // Also save to Firebase if configured
-            if (isFirebaseConfigured && db) {
-                db.ref('events/' + eventId).set(data);
-            }
-        }
-
-        function loadData() {
-            // First, try to load from localStorage
-            const saved = localStorage.getItem(LOCALSTORAGE_KEY);
-            if (saved) {
-                data = JSON.parse(saved);
-                
-                // Update date inputs if we have saved date range
-                if (data.dateRange && data.dateRange.startDate) {
-                    document.getElementById('startDate').value = data.dateRange.startDate;
-                    document.getElementById('numDays').value = data.dateRange.numDays;
-                    
-                    // Generate dates array
-                    dates = [];
-                    const start = new Date(data.dateRange.startDate);
-                    for (let i = 0; i < data.dateRange.numDays; i++) {
-                        const date = new Date(start);
-                        date.setDate(start.getDate() + i);
-                        dates.push(date);
-                    }
-                }
-                
-                // Render UI with loaded data
-                renderParticipants();
-                renderUserSelection();
-                renderMatrix();
-                updateResults();
-                updateDateRangeDisplay();
-            }
-            
-            // Then try to load from Firebase ONCE (if configured and no localStorage)
-            if (isFirebaseConfigured && db && !saved) {
-                // CRITICAL FIX: Use .once() instead of .on() to avoid infinite loop
-                // Only load from Firebase if localStorage is empty
-                db.ref('events/' + eventId).once('value', (snapshot) => {
-                    const loadedData = snapshot.val();
-                    
-                    if (loadedData && loadedData.participants) {
-                        data = loadedData;
-                        
-                        // Save to localStorage for future use
-                        localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
-                        
-                        // Update date inputs
-                        if (data.dateRange && data.dateRange.startDate) {
-                            document.getElementById('startDate').value = data.dateRange.startDate;
-                            document.getElementById('numDays').value = data.dateRange.numDays;
-                            
-                            // Generate dates array
-                            dates = [];
-                            const start = new Date(data.dateRange.startDate);
-                            for (let i = 0; i < data.dateRange.numDays; i++) {
-                                const date = new Date(start);
-                                date.setDate(start.getDate() + i);
-                                dates.push(date);
-                            }
-                        }
-                        
-                        renderParticipants();
-                        renderUserSelection();
-                        renderMatrix();
-                        updateResults();
-                        updateDateRangeDisplay();
-                    }
-                });
-            }
-        }
-
-        // =====================================================
         // PARTICIPANTS
         // =====================================================
         function addParticipant() {
@@ -750,7 +709,10 @@
 
             data.participants.push(name);
             
-            saveData();
+            if (!isUpdatingFromFirebase) {
+                saveData();
+            }
+            
             input.value = '';
             renderParticipants();
             renderUserSelection();
@@ -768,11 +730,11 @@
                 }
             });
 
-            saveData();
-            renderParticipants();
-            renderUserSelection();
-            renderMatrix();
-            updateResults();
+            if (!isUpdatingFromFirebase) {
+                saveData();
+            }
+            
+            renderAll();
         }
 
         function renderParticipants() {
@@ -793,7 +755,7 @@
 
             document.getElementById('selectUserSection').style.display = 'block';
             
-            // CRITICAL FIX: If a user is selected, show the matrix section
+            // If a user is selected, show the matrix section
             if (currentUser && data.participants.includes(currentUser)) {
                 document.getElementById('matrixSection').style.display = 'block';
                 document.getElementById('currentUserInfo').innerHTML = 
@@ -913,9 +875,12 @@
                 data.availability[slot].push(currentUser);
             }
 
-            saveData();
+            // Save to Firebase immediately
+            if (!isUpdatingFromFirebase) {
+                saveData();
+            }
             
-            // CRITICAL FIX: Re-render matrix and results after toggle
+            // Re-render locally for instant feedback
             renderMatrix();
             updateResults();
         }
@@ -1036,19 +1001,21 @@
         }
 
         // =====================================================
+        // RENDER ALL
+        // =====================================================
+        function renderAll() {
+            renderParticipants();
+            renderUserSelection();
+            renderMatrix();
+            updateResults();
+        }
+
+        // =====================================================
         // INITIALIZATION
         // =====================================================
-        // CRITICAL: Load data FIRST before initializing date range
-        // This prevents overwriting saved data with empty defaults
         loadData();
         initDateRange();
-        
-        // CRITICAL FIX: Always render UI on page load
-        // This ensures the form is visible even if Firebase has no data yet
-        renderParticipants();
-        renderUserSelection();
-        renderMatrix();
-        updateResults();
+        renderAll();
     </script>
 </body>
 </html>
