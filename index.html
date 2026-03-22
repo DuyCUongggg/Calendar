@@ -521,12 +521,12 @@
 
         <!-- Matrix -->
         <div class="section" id="matrixSection" style="display: none;">
-            <div class="section-title">4. Điền lịch rảnh (click vào ô)</div>
+            <div class="section-title">4. Ma trận lịch rảnh</div>
             
-            <div class="current-user-info" id="currentUserInfo"></div>
+            <div class="current-user-info" id="currentUserInfo" style="display: none;"></div>
 
             <div class="info-box">
-                💡 <strong>Cách dùng:</strong> Click vào các ô để đánh dấu bạn rảnh. Ô có chấm đen góc trái = bạn đã tick. Màu xanh đậm = nhiều người rảnh. Hover vào ô để xem chi tiết. Tự động lưu mỗi lần bạn click.
+                💡 <strong>Cách dùng:</strong> Chọn tên của bạn ở trên, sau đó click vào các ô để đánh dấu bạn rảnh. Ô có chấm đen góc trái = bạn đã tick. Màu xanh đậm = nhiều người rảnh. Hover vào ô để xem chi tiết. Tự động lưu mỗi lần bạn click.
             </div>
 
             <div class="matrix-container">
@@ -546,6 +546,11 @@
                 <div class="empty-state">Chưa có dữ liệu</div>
             </div>
         </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; padding: 20px; color: #999; font-size: 0.85em;">
+            Version v1.0.1
+        </div>
     </div>
 
     <!-- Tooltip -->
@@ -559,7 +564,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-       const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -619,67 +624,80 @@
         // =====================================================
         // FIREBASE SYNC
         // =====================================================
+        const LOCALSTORAGE_KEY = 'schedule_data_' + eventId;
+        
         function saveData() {
-            // Save to Firebase if configured
+            // ALWAYS save to localStorage as backup
+            localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
+            
+            // Also save to Firebase if configured
             if (isFirebaseConfigured && db) {
                 db.ref('events/' + eventId).set(data);
             }
         }
 
         function loadData() {
-            if (!isFirebaseConfigured || !db) {
-                // No Firebase, just init with defaults
-                initDateRange();
-                renderAll();
-                return;
-            }
-
-            // Setup Firebase realtime listener
-            db.ref('events/' + eventId).on('value', (snapshot) => {
-                const loadedData = snapshot.val();
-                
-                if (loadedData && loadedData.participants) {
-                    // Set flag to prevent save loop
-                    isUpdatingFromFirebase = true;
-                    
-                    data = loadedData;
-                    
-                    // MIGRATION: Convert old numDays format to endDate format
-                    if (data.dateRange && data.dateRange.startDate && data.dateRange.numDays && !data.dateRange.endDate) {
-                        const start = new Date(data.dateRange.startDate);
-                        const end = new Date(start);
-                        end.setDate(start.getDate() + data.dateRange.numDays - 1);
-                        data.dateRange.endDate = end.toISOString().split('T')[0];
-                        delete data.dateRange.numDays;
-                    }
-                    
-                    // Update date inputs
-                    if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
-                        document.getElementById('startDate').value = data.dateRange.startDate;
-                        document.getElementById('endDate').value = data.dateRange.endDate;
-                        
-                        // Generate dates array
-                        dates = [];
-                        const start = new Date(data.dateRange.startDate);
-                        const end = new Date(data.dateRange.endDate);
-                        const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
-                        
-                        for (let i = 0; i < numDays; i++) {
-                            const date = new Date(start);
-                            date.setDate(start.getDate() + i);
-                            dates.push(date);
-                        }
-                    }
-                    
-                    renderAll();
-                    updateDateRangeDisplay();
-                    
-                    // Reset flag after render
-                    setTimeout(() => {
-                        isUpdatingFromFirebase = false;
-                    }, 100);
+            // First, try to load from localStorage
+            const saved = localStorage.getItem(LOCALSTORAGE_KEY);
+            if (saved) {
+                try {
+                    data = JSON.parse(saved);
+                } catch (e) {
+                    console.error('localStorage parse error:', e);
                 }
-            });
+            }
+            
+            // If Firebase is configured, setup realtime listener
+            if (isFirebaseConfigured && db) {
+                db.ref('events/' + eventId).on('value', (snapshot) => {
+                    const loadedData = snapshot.val();
+                    
+                    if (loadedData && loadedData.participants) {
+                        // Set flag to prevent save loop
+                        isUpdatingFromFirebase = true;
+                        
+                        data = loadedData;
+                        
+                        // MIGRATION: Convert old numDays format to endDate format
+                        if (data.dateRange && data.dateRange.startDate && data.dateRange.numDays && !data.dateRange.endDate) {
+                            const start = new Date(data.dateRange.startDate);
+                            const end = new Date(start);
+                            end.setDate(start.getDate() + data.dateRange.numDays - 1);
+                            data.dateRange.endDate = end.toISOString().split('T')[0];
+                            delete data.dateRange.numDays;
+                        }
+                        
+                        // Update date inputs
+                        if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
+                            document.getElementById('startDate').value = data.dateRange.startDate;
+                            document.getElementById('endDate').value = data.dateRange.endDate;
+                            
+                            // Generate dates array
+                            dates = [];
+                            const start = new Date(data.dateRange.startDate);
+                            const end = new Date(data.dateRange.endDate);
+                            const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                            
+                            for (let i = 0; i < numDays; i++) {
+                                const date = new Date(start);
+                                date.setDate(start.getDate() + i);
+                                dates.push(date);
+                            }
+                        }
+                        
+                        renderAll();
+                        updateDateRangeDisplay();
+                        
+                        // Save to localStorage
+                        localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
+                        
+                        // Reset flag after render
+                        setTimeout(() => {
+                            isUpdatingFromFirebase = false;
+                        }, 100);
+                    }
+                });
+            }
         }
 
         // =====================================================
@@ -705,6 +723,12 @@
                     const date = new Date(today);
                     date.setDate(today.getDate() + i);
                     dates.push(date);
+                }
+                
+                // Save initial date range (bypass Firebase flag)
+                localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
+                if (isFirebaseConfigured && db) {
+                    db.ref('events/' + eventId).set(data);
                 }
             } else {
                 document.getElementById('startDate').value = data.dateRange.startDate;
@@ -822,6 +846,8 @@
             input.value = '';
             renderParticipants();
             renderUserSelection();
+            renderMatrix();  // CRITICAL FIX: Render matrix để hiện 0/X
+            updateResults();
         }
 
         function removeParticipant(name) {
@@ -849,6 +875,7 @@
             if (data.participants.length === 0) {
                 container.innerHTML = '<div class="empty-state" style="padding: 20px;">Chưa có ai. Thêm người tham gia để bắt đầu</div>';
                 document.getElementById('selectUserSection').style.display = 'none';
+                document.getElementById('matrixSection').style.display = 'none';
                 return;
             }
 
@@ -860,14 +887,15 @@
             `).join('');
 
             document.getElementById('selectUserSection').style.display = 'block';
+            document.getElementById('matrixSection').style.display = 'block';
             
-            // If a user is selected, show the matrix section
+            // Update current user info display
+            const infoDiv = document.getElementById('currentUserInfo');
             if (currentUser && data.participants.includes(currentUser)) {
-                document.getElementById('matrixSection').style.display = 'block';
-                document.getElementById('currentUserInfo').innerHTML = 
-                    `<strong>Đang điền lịch cho:</strong> ${currentUser}. Click vào các ô để đánh dấu rảnh.`;
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `<strong>Đang điền lịch cho:</strong> ${currentUser}. Click vào các ô để đánh dấu rảnh.`;
             } else {
-                document.getElementById('matrixSection').style.display = 'none';
+                infoDiv.style.display = 'none';
             }
         }
 
@@ -896,9 +924,11 @@
             renderParticipants();
             renderUserSelection();
             renderMatrix();
-            document.getElementById('matrixSection').style.display = 'block';
-            document.getElementById('currentUserInfo').innerHTML = 
-                `<strong>Đang điền lịch cho:</strong> ${name}. Click vào các ô để đánh dấu rảnh.`;
+            
+            // Show current user info
+            const infoDiv = document.getElementById('currentUserInfo');
+            infoDiv.style.display = 'block';
+            infoDiv.innerHTML = `<strong>Đang điền lịch cho:</strong> ${name}. Click vào các ô để đánh dấu rảnh.`;
         }
 
         // =====================================================
@@ -1119,7 +1149,29 @@
         // INITIALIZATION
         // =====================================================
         loadData();
-        initDateRange();
+        
+        // Init date range if not already loaded
+        if (!data.dateRange.startDate || !data.dateRange.endDate) {
+            initDateRange();
+        } else {
+            // Restore date inputs and generate dates array
+            document.getElementById('startDate').value = data.dateRange.startDate;
+            document.getElementById('endDate').value = data.dateRange.endDate;
+            
+            dates = [];
+            const start = new Date(data.dateRange.startDate);
+            const end = new Date(data.dateRange.endDate);
+            const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            
+            for (let i = 0; i < numDays; i++) {
+                const date = new Date(start);
+                date.setDate(start.getDate() + i);
+                dates.push(date);
+            }
+            
+            updateDateRangeDisplay();
+        }
+        
         renderAll();
     </script>
 </body>
