@@ -51,7 +51,7 @@
             display: flex;
             gap: 16px;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             flex-wrap: wrap;
         }
 
@@ -70,12 +70,17 @@
             outline: none;
             border-color: #10b981;
         }
+        
+        .date-controls > div:not(.date-range-display) {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
 
         .date-nav {
             display: flex;
             gap: 12px;
             align-items: center;
-            margin-bottom: 20px;
         }
 
         .nav-btn {
@@ -85,9 +90,7 @@
             cursor: pointer;
             font-family: inherit;
             font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            font-size: 1.2em;
         }
 
         .nav-btn:hover {
@@ -101,6 +104,7 @@
             border: 1px solid #10b981;
             font-weight: 500;
             color: #065f46;
+            flex: 0 0 auto;
         }
 
         /* Participants */
@@ -256,11 +260,21 @@
         }
 
         .time-cell.heat-0 { background: #ffffff; color: #999; }
-        .time-cell.heat-20 { background: #d1fae5; color: #065f46; }
-        .time-cell.heat-40 { background: #a7f3d0; color: #065f46; }
-        .time-cell.heat-60 { background: #6ee7b7; color: #065f46; }
-        .time-cell.heat-80 { background: #34d399; color: white; }
-        .time-cell.heat-100 { background: #10b981; color: white; }
+        .time-cell.heat-1 { background: #fee2e2; color: #991b1b; }  /* Đỏ nhạt - 1 người */
+        .time-cell.heat-2 { background: #fed7aa; color: #9a3412; }  /* Cam nhạt - 2 người */
+        .time-cell.heat-3 { background: #fde68a; color: #92400e; }  /* Vàng nhạt - 3 người */
+        .time-cell.heat-4 { background: #fef08a; color: #854d0e; }  /* Vàng - 4 người */
+        .time-cell.heat-5 { background: #d9f99d; color: #3f6212; }  /* Xanh lá nhạt - 5 người */
+        .time-cell.heat-6 { background: #bef264; color: #365314; }  /* Xanh lá vừa - 6 người */
+        .time-cell.heat-7 { background: #a3e635; color: #1a2e05; }  /* Xanh lá - 7 người */
+        .time-cell.heat-8 { background: #86efac; color: #14532d; }  /* Xanh lục - 8 người */
+        .time-cell.heat-9 { background: #6ee7b7; color: #065f46; }  /* Xanh lục đậm - 9 người */
+        .time-cell.heat-10 { background: #34d399; color: white; }   /* Xanh lục đậm hơn - 10 người */
+        .time-cell.heat-11 { background: #10b981; color: white; }   /* Xanh đậm - 11 người */
+        .time-cell.heat-12 { background: #059669; color: white; }   /* Xanh đậm hơn - 12 người */
+        .time-cell.heat-13 { background: #047857; color: white; }   /* Xanh đậm hơn nữa - 13 người */
+        .time-cell.heat-14 { background: #065f46; color: white; }   /* Xanh đậm nhất - 14 người */
+        .time-cell.heat-15 { background: #064e3b; color: white; }   /* Xanh đen - 15 người */
 
         .tooltip {
             position: fixed;
@@ -424,16 +438,12 @@
                     <label>Số ngày (tối đa 15):</label>
                     <input type="number" id="numDays" min="1" max="15" value="7" onchange="updateDateRange()" />
                 </div>
+                <div class="date-range-display" id="dateRangeDisplay"></div>
             </div>
 
             <div class="date-nav">
-                <button class="nav-btn" onclick="navigateDates(-1)">
-                    ◀ 15 ngày trước
-                </button>
-                <div class="date-range-display" id="dateRangeDisplay"></div>
-                <button class="nav-btn" onclick="navigateDates(1)">
-                    15 ngày sau ▶
-                </button>
+                <button class="nav-btn" onclick="navigateDates(-1)">◀</button>
+                <button class="nav-btn" onclick="navigateDates(1)">▶</button>
             </div>
         </div>
 
@@ -494,7 +504,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-const firebaseConfig = {
+      const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -831,14 +841,17 @@ const firebaseConfig = {
                     const available = data.availability[slot] || [];
                     const count = available.length;
                     const total = data.participants.length;
-                    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
                     
+                    // Dùng count thực tế để quyết định màu (1-15 người)
                     let heatClass = 'heat-0';
-                    if (percentage >= 100) heatClass = 'heat-100';
-                    else if (percentage >= 80) heatClass = 'heat-80';
-                    else if (percentage >= 60) heatClass = 'heat-60';
-                    else if (percentage >= 40) heatClass = 'heat-40';
-                    else if (percentage >= 20) heatClass = 'heat-20';
+                    if (count === 0) {
+                        heatClass = 'heat-0';
+                    } else if (count >= 15) {
+                        heatClass = 'heat-15';
+                    } else {
+                        // count từ 1-14 → heat-1 đến heat-14
+                        heatClass = `heat-${count}`;
+                    }
 
                     html += `
                         <div class="time-cell ${heatClass}" 
