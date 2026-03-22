@@ -81,6 +81,8 @@
             display: flex;
             gap: 12px;
             align-items: center;
+            justify-content: center;
+            margin-top: 20px;
         }
 
         .nav-btn {
@@ -440,11 +442,6 @@
                 </div>
                 <div class="date-range-display" id="dateRangeDisplay"></div>
             </div>
-
-            <div class="date-nav">
-                <button class="nav-btn" onclick="navigateDates(-1)">◀</button>
-                <button class="nav-btn" onclick="navigateDates(1)">▶</button>
-            </div>
         </div>
 
         <!-- Participants -->
@@ -481,6 +478,11 @@
                 <div class="time-matrix" id="timeMatrix"></div>
             </div>
 
+            <div class="date-nav">
+                <button class="nav-btn" onclick="navigateDates(-1)">◀</button>
+                <button class="nav-btn" onclick="navigateDates(1)">▶</button>
+            </div>
+
             <button class="primary" onclick="finishMarking()">✓ Hoàn tất</button>
         </div>
 
@@ -504,7 +506,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-      const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
