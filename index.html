@@ -549,7 +549,7 @@
 
         <!-- Footer -->
         <div style="text-align: center; padding: 20px; color: #999; font-size: 0.85em;">
-            Version v1.0.1
+            Version v1.0.3
         </div>
     </div>
 
@@ -564,7 +564,7 @@
         // =====================================================
         // FIREBASE CONFIG - PASTE YOUR CONFIG HERE
         // =====================================================
-const firebaseConfig = {
+      const firebaseConfig = {
   apiKey: "AIzaSyDWsg2mJedg7IN4Sfa2UcwgA_makmDElzI",
   authDomain: "calendar-78177.firebaseapp.com",
   databaseURL: "https://calendar-78177-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -614,7 +614,6 @@ const firebaseConfig = {
 
         let currentUser = null;
         let dates = [];
-        let isUpdatingFromFirebase = false; // Flag to prevent loop
         
         const TIME_SLOTS = [];
         for (let h = 7; h <= 22; h++) {
@@ -622,82 +621,88 @@ const firebaseConfig = {
         }
 
         // =====================================================
-        // FIREBASE SYNC
+        // SAVE/LOAD - SIMPLIFIED
         // =====================================================
         const LOCALSTORAGE_KEY = 'schedule_data_' + eventId;
         
-        function saveData() {
-            // ALWAYS save to localStorage as backup
+        function saveToLocalStorage() {
             localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
-            
-            // Also save to Firebase if configured
-            if (isFirebaseConfigured && db) {
-                db.ref('events/' + eventId).set(data);
-            }
+            console.log('[SAVE] localStorage updated');
         }
-
-        function loadData() {
-            // First, try to load from localStorage
+        
+        function loadFromLocalStorage() {
             const saved = localStorage.getItem(LOCALSTORAGE_KEY);
             if (saved) {
                 try {
                     data = JSON.parse(saved);
+                    console.log('[LOAD] localStorage loaded:', data.participants.length, 'participants');
+                    return true;
                 } catch (e) {
-                    console.error('localStorage parse error:', e);
+                    console.error('[ERROR] localStorage parse failed:', e);
+                    return false;
                 }
             }
+            return false;
+        }
+        
+        function saveToFirebase() {
+            if (!isFirebaseConfigured || !db) return;
             
-            // If Firebase is configured, setup realtime listener
-            if (isFirebaseConfigured && db) {
-                db.ref('events/' + eventId).on('value', (snapshot) => {
-                    const loadedData = snapshot.val();
+            console.log('[FIREBASE] Saving...');
+            db.ref('events/' + eventId).set(data).then(() => {
+                console.log('[FIREBASE] Saved successfully');
+            }).catch((err) => {
+                console.error('[FIREBASE] Save error:', err);
+            });
+        }
+        
+        function setupFirebaseSync() {
+            if (!isFirebaseConfigured || !db) return;
+            
+            console.log('[FIREBASE] Setting up listener...');
+            
+            db.ref('events/' + eventId).on('value', (snapshot) => {
+                const firebaseData = snapshot.val();
+                
+                if (!firebaseData || !firebaseData.participants) {
+                    console.log('[FIREBASE] No data from server, keeping local data');
+                    return;
+                }
+                
+                // Merge strategy: Combine participants and availability
+                const localParticipants = data.participants || [];
+                const firebaseParticipants = firebaseData.participants || [];
+                
+                // If local has more participants, keep local
+                if (localParticipants.length >= firebaseParticipants.length) {
+                    console.log('[FIREBASE] Local data is newer, ignoring Firebase update');
+                    return;
+                }
+                
+                console.log('[FIREBASE] Received update, merging...');
+                data = firebaseData;
+                
+                // Update UI
+                if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
+                    document.getElementById('startDate').value = data.dateRange.startDate;
+                    document.getElementById('endDate').value = data.dateRange.endDate;
                     
-                    if (loadedData && loadedData.participants) {
-                        // Set flag to prevent save loop
-                        isUpdatingFromFirebase = true;
-                        
-                        data = loadedData;
-                        
-                        // MIGRATION: Convert old numDays format to endDate format
-                        if (data.dateRange && data.dateRange.startDate && data.dateRange.numDays && !data.dateRange.endDate) {
-                            const start = new Date(data.dateRange.startDate);
-                            const end = new Date(start);
-                            end.setDate(start.getDate() + data.dateRange.numDays - 1);
-                            data.dateRange.endDate = end.toISOString().split('T')[0];
-                            delete data.dateRange.numDays;
-                        }
-                        
-                        // Update date inputs
-                        if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
-                            document.getElementById('startDate').value = data.dateRange.startDate;
-                            document.getElementById('endDate').value = data.dateRange.endDate;
-                            
-                            // Generate dates array
-                            dates = [];
-                            const start = new Date(data.dateRange.startDate);
-                            const end = new Date(data.dateRange.endDate);
-                            const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
-                            
-                            for (let i = 0; i < numDays; i++) {
-                                const date = new Date(start);
-                                date.setDate(start.getDate() + i);
-                                dates.push(date);
-                            }
-                        }
-                        
-                        renderAll();
-                        updateDateRangeDisplay();
-                        
-                        // Save to localStorage
-                        localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
-                        
-                        // Reset flag after render
-                        setTimeout(() => {
-                            isUpdatingFromFirebase = false;
-                        }, 100);
+                    dates = [];
+                    const start = new Date(data.dateRange.startDate);
+                    const end = new Date(data.dateRange.endDate);
+                    const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                    
+                    for (let i = 0; i < numDays; i++) {
+                        const date = new Date(start);
+                        date.setDate(start.getDate() + i);
+                        dates.push(date);
                     }
-                });
-            }
+                }
+                
+                saveToLocalStorage();
+                renderAll();
+                updateDateRangeDisplay();
+            });
         }
 
         // =====================================================
@@ -725,11 +730,9 @@ const firebaseConfig = {
                     dates.push(date);
                 }
                 
-                // Save initial date range (bypass Firebase flag)
-                localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
-                if (isFirebaseConfigured && db) {
-                    db.ref('events/' + eventId).set(data);
-                }
+                // Save initial date range
+                saveToLocalStorage();
+                saveToFirebase();
             } else {
                 document.getElementById('startDate').value = data.dateRange.startDate;
                 document.getElementById('endDate').value = data.dateRange.endDate;
@@ -784,10 +787,8 @@ const firebaseConfig = {
 
             updateDateRangeDisplay();
             renderMatrix();
-            
-            if (!isUpdatingFromFirebase) {
-                saveData();
-            }
+            saveToLocalStorage();
+            saveToFirebase();
         }
 
         function updateDateRangeDisplay() {
@@ -837,17 +838,19 @@ const firebaseConfig = {
                 return;
             }
 
+            console.log('[ADD] Adding participant:', name);
             data.participants.push(name);
             
-            if (!isUpdatingFromFirebase) {
-                saveData();
-            }
+            saveToLocalStorage();
+            saveToFirebase();
             
             input.value = '';
             renderParticipants();
             renderUserSelection();
-            renderMatrix();  // CRITICAL FIX: Render matrix để hiện 0/X
+            renderMatrix();
             updateResults();
+            
+            console.log('[ADD] Participant added, total:', data.participants.length);
         }
 
         function removeParticipant(name) {
@@ -862,10 +865,8 @@ const firebaseConfig = {
                 }
             });
 
-            if (!isUpdatingFromFirebase) {
-                saveData();
-            }
-            
+            saveToLocalStorage();
+            saveToFirebase();
             renderAll();
         }
 
@@ -1014,16 +1015,14 @@ const firebaseConfig = {
                 if (data.availability[slot].length === 0) {
                     delete data.availability[slot];
                 }
+                console.log('[TOGGLE] Removed', currentUser, 'from', slot);
             } else {
                 data.availability[slot].push(currentUser);
+                console.log('[TOGGLE] Added', currentUser, 'to', slot);
             }
 
-            // Save to Firebase immediately
-            if (!isUpdatingFromFirebase) {
-                saveData();
-            }
-            
-            // Re-render locally for instant feedback
+            saveToLocalStorage();
+            saveToFirebase();
             renderMatrix();
             updateResults();
         }
@@ -1148,12 +1147,17 @@ const firebaseConfig = {
         // =====================================================
         // INITIALIZATION
         // =====================================================
-        loadData();
+        console.log('[INIT] Starting...');
+        
+        // Load from localStorage first
+        const hasLocalData = loadFromLocalStorage();
         
         // Init date range if not already loaded
         if (!data.dateRange.startDate || !data.dateRange.endDate) {
+            console.log('[INIT] No date range, initializing...');
             initDateRange();
         } else {
+            console.log('[INIT] Date range loaded');
             // Restore date inputs and generate dates array
             document.getElementById('startDate').value = data.dateRange.startDate;
             document.getElementById('endDate').value = data.dateRange.endDate;
@@ -1172,7 +1176,14 @@ const firebaseConfig = {
             updateDateRangeDisplay();
         }
         
+        // Render UI
+        console.log('[INIT] Rendering UI...');
         renderAll();
+        
+        // Setup Firebase sync (if configured)
+        setupFirebaseSync();
+        
+        console.log('[INIT] Complete!');
     </script>
 </body>
 </html>
