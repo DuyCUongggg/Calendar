@@ -423,7 +423,7 @@
                 <li>Tạo Firebase project tại <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
                 <li>Tạo Realtime Database (test mode)</li>
                 <li>Lấy Firebase Config từ Project Settings</li>
-                <li>Paste config vào dòng 440 của file HTML này</li>
+                <li>Paste config vào dòng 433 của file HTML này</li>
             </ol>
         </div>
 
@@ -437,8 +437,8 @@
                     <input type="date" id="startDate" onchange="updateDateRange()" />
                 </div>
                 <div>
-                    <label>Số ngày (tối đa 15):</label>
-                    <input type="number" id="numDays" min="1" max="15" value="7" onchange="updateDateRange()" />
+                    <label>Ngày kết thúc:</label>
+                    <input type="date" id="endDate" onchange="updateDateRange()" />
                 </div>
                 <div class="date-range-display" id="dateRangeDisplay"></div>
             </div>
@@ -550,7 +550,7 @@ const firebaseConfig = {
             availability: {},
             dateRange: {
                 startDate: null,
-                numDays: 7
+                endDate: null
             }
         };
 
@@ -591,15 +591,27 @@ const firebaseConfig = {
                     
                     data = loadedData;
                     
+                    // MIGRATION: Convert old numDays format to endDate format
+                    if (data.dateRange && data.dateRange.startDate && data.dateRange.numDays && !data.dateRange.endDate) {
+                        const start = new Date(data.dateRange.startDate);
+                        const end = new Date(start);
+                        end.setDate(start.getDate() + data.dateRange.numDays - 1);
+                        data.dateRange.endDate = end.toISOString().split('T')[0];
+                        delete data.dateRange.numDays;
+                    }
+                    
                     // Update date inputs
-                    if (data.dateRange && data.dateRange.startDate) {
+                    if (data.dateRange && data.dateRange.startDate && data.dateRange.endDate) {
                         document.getElementById('startDate').value = data.dateRange.startDate;
-                        document.getElementById('numDays').value = data.dateRange.numDays;
+                        document.getElementById('endDate').value = data.dateRange.endDate;
                         
                         // Generate dates array
                         dates = [];
                         const start = new Date(data.dateRange.startDate);
-                        for (let i = 0; i < data.dateRange.numDays; i++) {
+                        const end = new Date(data.dateRange.endDate);
+                        const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                        
+                        for (let i = 0; i < numDays; i++) {
                             const date = new Date(start);
                             date.setDate(start.getDate() + i);
                             dates.push(date);
@@ -622,28 +634,35 @@ const firebaseConfig = {
         // =====================================================
         function initDateRange() {
             const today = new Date();
-            const dateStr = today.toISOString().split('T')[0];
+            const todayStr = today.toISOString().split('T')[0];
+            
+            // Calculate end date (14 days later = 15 days total)
+            const endDay = new Date(today);
+            endDay.setDate(today.getDate() + 14);
+            const endDayStr = endDay.toISOString().split('T')[0];
             
             if (!data.dateRange.startDate) {
-                document.getElementById('startDate').value = dateStr;
-                document.getElementById('numDays').value = 7;
-                data.dateRange = { startDate: dateStr, numDays: 7 };
+                document.getElementById('startDate').value = todayStr;
+                document.getElementById('endDate').value = endDayStr;
+                data.dateRange = { startDate: todayStr, endDate: endDayStr };
                 
                 // Generate dates array
                 dates = [];
-                const start = new Date(dateStr);
-                for (let i = 0; i < 7; i++) {
-                    const date = new Date(start);
-                    date.setDate(start.getDate() + i);
+                for (let i = 0; i < 15; i++) {
+                    const date = new Date(today);
+                    date.setDate(today.getDate() + i);
                     dates.push(date);
                 }
             } else {
                 document.getElementById('startDate').value = data.dateRange.startDate;
-                document.getElementById('numDays').value = data.dateRange.numDays;
+                document.getElementById('endDate').value = data.dateRange.endDate;
                 
                 if (dates.length === 0) {
                     const start = new Date(data.dateRange.startDate);
-                    for (let i = 0; i < data.dateRange.numDays; i++) {
+                    const end = new Date(data.dateRange.endDate);
+                    const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                    
+                    for (let i = 0; i < numDays; i++) {
                         const date = new Date(start);
                         date.setDate(start.getDate() + i);
                         dates.push(date);
@@ -656,15 +675,30 @@ const firebaseConfig = {
 
         function updateDateRange() {
             const startDate = document.getElementById('startDate').value;
-            const numDays = parseInt(document.getElementById('numDays').value);
+            const endDate = document.getElementById('endDate').value;
 
-            if (!startDate || numDays < 1 || numDays > 15) return;
+            if (!startDate || !endDate) return;
 
-            data.dateRange = { startDate, numDays };
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            // Validate
+            if (end < start) {
+                alert('Ngày kết thúc phải sau ngày bắt đầu');
+                return;
+            }
+            
+            const numDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            
+            if (numDays > 15) {
+                alert('Chỉ được chọn tối đa 15 ngày');
+                return;
+            }
+
+            data.dateRange = { startDate, endDate };
             
             // Generate dates
             dates = [];
-            const start = new Date(startDate);
             for (let i = 0; i < numDays; i++) {
                 const date = new Date(start);
                 date.setDate(start.getDate() + i);
@@ -694,11 +728,18 @@ const firebaseConfig = {
 
         function navigateDates(direction) {
             const startInput = document.getElementById('startDate');
-            const currentStart = new Date(startInput.value);
+            const endInput = document.getElementById('endDate');
             
+            const currentStart = new Date(startInput.value);
+            const currentEnd = new Date(endInput.value);
+            
+            // Shift both dates by 15 days
             currentStart.setDate(currentStart.getDate() + (direction * 15));
+            currentEnd.setDate(currentEnd.getDate() + (direction * 15));
             
             startInput.value = currentStart.toISOString().split('T')[0];
+            endInput.value = currentEnd.toISOString().split('T')[0];
+            
             updateDateRange();
         }
 
